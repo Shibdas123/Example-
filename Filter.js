@@ -117,7 +117,7 @@
                 updateStatus("Page Changed 🔔");
 
                 // stop after 5 sec
-                setTimeout(stopAlarm, 3000);
+                setTimeout(stopAlarm, 2000);
             }
         });
 
