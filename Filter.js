@@ -3,58 +3,24 @@
     if (window.autoBuyerRunning) return;
     window.autoBuyerRunning = true;
 
-    // ===== ACCESS CONTROL =====
-    async function checkAccess() {
+    // ===== ACCESS CONTROL (SAFE INSERT) =====
+    (async () => {
 
         function getUserUID() {
-
-            // 1. localStorage scan
             for (let k of Object.keys(localStorage)) {
                 try {
                     let val = localStorage.getItem(k);
-                    if (val && val.length > 5 && /uid|user|account/i.test(k)) {
-                        return val;
-                    }
+                    if (!val) continue;
+
+                    try {
+                        let obj = JSON.parse(val);
+
+                        if (obj?.memberId) return String(obj.memberId);
+                        if (obj?.value?.memberId) return String(obj.value.memberId);
+
+                    } catch {}
                 } catch {}
             }
-
-            // 2. sessionStorage scan
-            for (let k of Object.keys(sessionStorage)) {
-                try {
-                    let val = sessionStorage.getItem(k);
-                    if (val && val.length > 5 && /uid|user|account/i.test(k)) {
-                        return val;
-                    }
-                } catch {}
-            }
-
-            // 3. JWT decode
-            let token = localStorage.getItem("token") || sessionStorage.getItem("token");
-            if (token) {
-                try {
-                    let payload = JSON.parse(atob(token.split('.')[1]));
-                    return payload.uid || payload.userId || payload.sub || null;
-                } catch {}
-            }
-
-            // 4. page text scan
-            let match = document.body.innerText.match(/UID[:\s]*([A-Z0-9]+)/i);
-            if (match) return match[1];
-
-            // 5. React props scan
-            for (let el of document.querySelectorAll("*")) {
-                let key = Object.keys(el).find(k => k.startsWith("__reactProps"));
-                if (key) {
-                    let props = el[key];
-                    if (props && props.user && props.user.uid) {
-                        return props.user.uid;
-                    }
-                }
-            }
-
-            // 6. API captured UID
-            if (window.detectedUID) return window.detectedUID;
-
             return null;
         }
 
@@ -64,7 +30,7 @@
         if (!userID) {
             alert("❌ UID not found");
             window.autoBuyerRunning = false;
-            return false;
+            throw new Error("STOP");
         }
 
         try {
@@ -74,178 +40,220 @@
             if (!data.allowedUIDs.includes(userID)) {
                 alert("⛔ Access Denied");
                 window.autoBuyerRunning = false;
-                return false;
+                throw new Error("STOP");
             }
 
-            alert("✅ Access Granted: " + userID);
-            return true;
+            console.log("✅ Access Granted:", userID);
 
         } catch (err) {
             alert("⚠️ Access check failed");
-            console.error(err);
             window.autoBuyerRunning = false;
-            return false;
+            throw new Error("STOP");
+        }
+
+    })();
+
+    // ===== ORIGINAL CODE =====
+
+    let running = false;
+    let targetAmount = 1000; // ✅ UPDATED
+    let panel = null;
+
+    function reactClick(el) {
+        try {
+            const key = Object.keys(el).find(k => k.startsWith("__reactProps"));
+            if (key && el[key]?.onClick) {
+                el[key].onClick({ target: el });
+            } else {
+                el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+            }
+        } catch {
+            el.click();
         }
     }
 
-    // ===== WAIT FOR ACCESS CHECK =====
-    checkAccess().then(access => {
+    function updateStatus(msg) {
+        let s = document.getElementById("status");
+        if (s) s.innerText = msg;
+    }
 
-        if (!access) return;
+    function getDefaultBtn() {
+        return Array.from(document.querySelectorAll("div, button"))
+            .find(el => el.innerText.trim() === "Default");
+    }
 
-        // ===== ORIGINAL CODE =====
+    function extractAmount(text) {
+        let match = text.match(/₹\s?(\d+(\.\d+)?)/);
+        return match ? parseFloat(match[1]) : null;
+    }
 
-        let running = false;
-        let targetAmount = 1000;
-        let panel = null;
+    function isSuccess() {
+        return document.body.innerText.includes("Order submitted") ||
+               document.body.innerText.includes("Processing");
+    }
 
-        function reactClick(el) {
-            try {
-                const key = Object.keys(el).find(k => k.startsWith("__reactProps"));
-                if (key && el[key]?.onClick) {
-                    el[key].onClick({ target: el });
-                } else {
-                    el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    function isFailed() {
+        return document.body.innerText.includes("Limited by functionality");
+    }
+
+    function closePopup() {
+        document.querySelectorAll("button, div").forEach(el => {
+            let txt = (el.innerText || "").toLowerCase();
+            if (txt.includes("close") || txt.includes("ok") || txt.includes("cancel")) {
+                reactClick(el);
+            }
+        });
+
+        document.querySelectorAll(".ant-modal, .modal, [role='dialog']").forEach(m => {
+            m.remove();
+        });
+    }
+
+    function scanAndBuy() {
+        let rows = document.querySelectorAll("div");
+
+        for (let row of rows) {
+            let txt = row.innerText || "";
+            let amount = extractAmount(txt);
+
+            if (amount !== null && amount === Number(targetAmount)) {
+                let btn = Array.from(row.querySelectorAll("button"))
+                    .find(b => /buy/i.test(b.innerText));
+
+                if (btn) {
+                    updateStatus("Buying " + amount);
+                    reactClick(btn);
+                    return true;
                 }
-            } catch {
-                el.click();
             }
         }
+        return false;
+    }
 
-        function updateStatus(msg) {
-            let s = document.getElementById("status");
-            if (s) s.innerText = msg;
+    function loop() {
+        if (!running) return;
+
+        let defBtn = getDefaultBtn();
+
+        if (defBtn) {
+            reactClick(defBtn);
+            updateStatus("Refreshing...");
+        } else {
+            updateStatus("Default not found");
         }
 
-        function getDefaultBtn() {
-            return Array.from(document.querySelectorAll("div, button"))
-                .find(el => el.innerText.trim() === "Default");
-        }
+        setTimeout(() => {
 
-        function extractAmount(text) {
-            let match = text.match(/₹\s?(\d+(\.\d+)?)/);
-            return match ? parseFloat(match[1]) : null;
-        }
+            scanAndBuy();
 
-        function isSuccess() {
-            return document.body.innerText.includes("Order submitted") ||
-                   document.body.innerText.includes("Processing");
-        }
+            if (isSuccess()) {
+                updateStatus("Success");
+                closePopup();
+                running = false;
 
-        function isFailed() {
-            return document.body.innerText.includes("Limited by functionality");
-        }
-
-        function closePopup() {
-            document.querySelectorAll("button, div").forEach(el => {
-                let txt = (el.innerText || "").toLowerCase();
-                if (txt.includes("close") || txt.includes("ok") || txt.includes("cancel")) {
-                    reactClick(el);
-                }
-            });
-
-            document.querySelectorAll(".ant-modal, .modal, [role='dialog']").forEach(m => {
-                m.remove();
-            });
-        }
-
-        function scanAndBuy() {
-            let rows = document.querySelectorAll("div");
-
-            for (let row of rows) {
-                let txt = row.innerText || "";
-                let amount = extractAmount(txt);
-
-                if (amount !== null && amount === Number(targetAmount)) {
-                    let btn = Array.from(row.querySelectorAll("button"))
-                        .find(b => /buy/i.test(b.innerText));
-
-                    if (btn) {
-                        updateStatus("Buying " + amount);
-                        reactClick(btn);
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-
-        function loop() {
-            if (!running) return;
-
-            let defBtn = getDefaultBtn();
-
-            if (defBtn) {
-                reactClick(defBtn);
-                updateStatus("Refreshing...");
-            } else {
-                updateStatus("Default not found");
+                if (panel) panel.remove();
+                window.autoBuyerRunning = false;
+                return;
             }
 
-            setTimeout(() => {
+            if (isFailed()) {
+                updateStatus("Retry...");
+                closePopup();
+            }
 
-                scanAndBuy();
+            setTimeout(loop, 250);
 
-                if (isSuccess()) {
-                    updateStatus("Success");
-                    closePopup();
-                    running = false;
+        }, 120);
+    }
 
-                    if (panel) panel.remove();
-                    window.autoBuyerRunning = false;
-                    return;
-                }
+    // ===== CREATE PANEL =====
+    panel = document.createElement("div");
 
-                if (isFailed()) {
-                    updateStatus("Retry...");
-                    closePopup();
-                }
+    panel.style = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: #0a0a0a;
+        color: #fff;
+        padding: 12px;
+        border-radius: 10px;
+        z-index: 999999;
+        width: 220px;
+        box-shadow: 0 0 12px #00ffcc;
+        font-family: Arial;
+        cursor: grab;
+    `;
 
-                setTimeout(loop, 250);
+    panel.innerHTML = `
+        <div id="dragHandle" style="margin-bottom:6px;cursor:grab;">🎯 Drag Me</div>
 
-            }, 120);
-        }
+        <input id="amt" type="number" value="1000"
+        style="width:100%;margin-bottom:6px;padding:6px;background:#111;color:#00ffcc;border:2px solid #00ffcc;border-radius:6px;text-align:center;"/>
 
-        // ===== PANEL =====
-        panel = document.createElement("div");
+        <div id="status" style="margin-bottom:6px;font-size:12px;color:#ccc;">
+            Idle
+        </div>
 
-        panel.style = `
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: #0a0a0a;
-            color: #fff;
-            padding: 12px;
-            border-radius: 10px;
-            z-index: 999999;
-            width: 220px;
-            box-shadow: 0 0 12px #00ffcc;
-            font-family: Arial;
-            cursor: grab;
-        `;
+        <button id="start" style="width:48%;background:green;color:#fff;border:none;padding:6px;border-radius:5px;">
+            Start
+        </button>
 
-        panel.innerHTML = `
-            <div id="dragHandle">🎯 Drag Me</div>
-            <input id="amt" type="number" value="1000"/>
-            <div id="status">Idle</div>
-            <button id="start">Start</button>
-            <button id="stop">Stop</button>
-        `;
+        <button id="stop" style="width:48%;background:red;color:#fff;border:none;padding:6px;border-radius:5px;">
+            Stop
+        </button>
+    `;
 
-        document.body.appendChild(panel);
+    document.body.appendChild(panel);
 
-        document.getElementById("start").onclick = () => {
-            targetAmount = Number(document.getElementById("amt").value);
-            running = true;
-            updateStatus("Started...");
-            loop();
-        };
+    // ===== DRAG FUNCTION =====
+    let isDragging = false;
+    let offsetY = 0;
 
-        document.getElementById("stop").onclick = () => {
-            running = false;
-            updateStatus("Stopped");
-        };
+    const dragHandle = document.getElementById("dragHandle");
 
+    dragHandle.addEventListener("touchstart", e => {
+        isDragging = true;
+        offsetY = e.touches[0].clientY - panel.getBoundingClientRect().top;
     });
+
+    document.addEventListener("touchmove", e => {
+        if (!isDragging) return;
+        let y = e.touches[0].clientY - offsetY;
+        panel.style.top = y + "px";
+        panel.style.bottom = "auto";
+    });
+
+    document.addEventListener("touchend", () => {
+        isDragging = false;
+    });
+
+    dragHandle.addEventListener("mousedown", e => {
+        isDragging = true;
+        offsetY = e.clientY - panel.getBoundingClientRect().top;
+    });
+
+    document.addEventListener("mousemove", e => {
+        if (!isDragging) return;
+        let y = e.clientY - offsetY;
+        panel.style.top = y + "px";
+        panel.style.bottom = "auto";
+    });
+
+    document.addEventListener("mouseup", () => {
+        isDragging = false;
+    });
+
+    // ===== CONTROLS =====
+    document.getElementById("start").onclick = () => {
+        targetAmount = Number(document.getElementById("amt").value);
+        running = true;
+        updateStatus("Started...");
+        loop();
+    };
+
+    document.getElementById("stop").onclick = () => {
+        running = false;
+        updateStatus("Stopped");
+    };
 
 })();
