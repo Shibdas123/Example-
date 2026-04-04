@@ -3,8 +3,8 @@
     if (window.autoBuyerRunning) return;
     window.autoBuyerRunning = true;
 
-    // ===== ACCESS CONTROL (FIXED PROPERLY) =====
-    (async () => {
+    // ===== ACCESS CONTROL (UPDATED ONLY THIS PART) =====
+    (async function () {
 
         function getUserUID() {
             for (let k of Object.keys(localStorage)) {
@@ -25,9 +25,9 @@
         }
 
         const userID = getUserUID();
-        console.log("Detected UID:", userID);
 
         if (!userID) {
+            alert("Access Denied ❌");
             window.autoBuyerRunning = false;
             return;
         }
@@ -39,17 +39,18 @@
             const allowed = data.allowedUIDs.map(x => String(x).trim());
 
             if (!allowed.includes(userID)) {
+                alert("Access Denied ❌");
                 window.autoBuyerRunning = false;
                 return;
             }
 
-            console.log("✅ Access Granted:", userID);
+            alert("Access Granted ✅");
 
-            // ===== ONLY RUN MAIN CODE AFTER ACCESS =====
-
+            // ===== CONTINUE ORIGINAL CODE ONLY AFTER ACCESS =====
             startMain();
 
         } catch (err) {
+            alert("Access check failed ❌");
             window.autoBuyerRunning = false;
             return;
         }
@@ -57,7 +58,7 @@
     })();
 
 
-    // ===== ORIGINAL CODE MOVED INTO FUNCTION (UNCHANGED) =====
+    // ===== ORIGINAL CODE WRAPPED (UNCHANGED) =====
     function startMain() {
 
         let running = false;
@@ -189,14 +190,62 @@
         `;
 
         panel.innerHTML = `
-            <div id="dragHandle">🎯 Drag Me</div>
-            <input id="amt" type="number" value="1000"/>
-            <div id="status">Idle</div>
-            <button id="start">Start</button>
-            <button id="stop">Stop</button>
+            <div id="dragHandle" style="margin-bottom:6px;cursor:grab;">🎯 Drag Me</div>
+
+            <input id="amt" type="number" value="1000"
+            style="width:100%;margin-bottom:6px;padding:6px;background:#111;color:#00ffcc;border:2px solid #00ffcc;border-radius:6px;text-align:center;"/>
+
+            <div id="status" style="margin-bottom:6px;font-size:12px;color:#ccc;">
+                Idle
+            </div>
+
+            <button id="start" style="width:48%;background:green;color:#fff;border:none;padding:6px;border-radius:5px;">
+                Start
+            </button>
+
+            <button id="stop" style="width:48%;background:red;color:#fff;border:none;padding:6px;border-radius:5px;">
+                Stop
+            </button>
         `;
 
         document.body.appendChild(panel);
+
+        let isDragging = false;
+        let offsetY = 0;
+
+        const dragHandle = document.getElementById("dragHandle");
+
+        dragHandle.addEventListener("touchstart", e => {
+            isDragging = true;
+            offsetY = e.touches[0].clientY - panel.getBoundingClientRect().top;
+        });
+
+        document.addEventListener("touchmove", e => {
+            if (!isDragging) return;
+            let y = e.touches[0].clientY - offsetY;
+            panel.style.top = y + "px";
+            panel.style.bottom = "auto";
+        });
+
+        document.addEventListener("touchend", () => {
+            isDragging = false;
+        });
+
+        dragHandle.addEventListener("mousedown", e => {
+            isDragging = true;
+            offsetY = e.clientY - panel.getBoundingClientRect().top;
+        });
+
+        document.addEventListener("mousemove", e => {
+            if (!isDragging) return;
+            let y = e.clientY - offsetY;
+            panel.style.top = y + "px";
+            panel.style.bottom = "auto";
+        });
+
+        document.addEventListener("mouseup", () => {
+            isDragging = false;
+        });
 
         document.getElementById("start").onclick = () => {
             targetAmount = Number(document.getElementById("amt").value);
