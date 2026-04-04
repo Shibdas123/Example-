@@ -76,7 +76,7 @@
                         audio.pause();
                         audio.currentTime = 0;
                     }
-                }, 2000);
+                }, 4000);
 
             } catch (e) {}
         }
