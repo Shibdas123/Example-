@@ -28,7 +28,7 @@
 
         const userID = getUserUID();
         console.log("Detected UID:", userID);
-        console.log("Allowed UID list:", data.allowedUIDs);
+
 
         if (!userID) {
             alert("❌ UID not found");
