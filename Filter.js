@@ -3,7 +3,6 @@
     if (window.autoBuyerRunning) return;
     window.autoBuyerRunning = true;
 
-    // ===== ACCESS CONTROL (UPDATED ONLY THIS PART) =====
     (async function () {
 
         function getUserUID() {
@@ -45,8 +44,6 @@
             }
 
             alert("Access Granted ✅");
-
-            // ===== CONTINUE ORIGINAL CODE ONLY AFTER ACCESS =====
             startMain();
 
         } catch (err) {
@@ -58,19 +55,29 @@
     })();
 
 
-    // ===== ORIGINAL CODE WRAPPED (UNCHANGED) =====
     function startMain() {
 
         let running = false;
         let targetAmount = 1000;
         let panel = null;
 
-        // 🔔 ALARM FUNCTION ADDED
-        function playAlarm() {
+        // 🔔 BUY PAGE ALARM CONTROL
+        let alarmPlayed = false;
+        let audio = null;
+
+        function playAlarmShort() {
             try {
-                const audio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
+                audio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
                 audio.volume = 1;
                 audio.play();
+
+                setTimeout(() => {
+                    if (audio) {
+                        audio.pause();
+                        audio.currentTime = 0;
+                    }
+                }, 2000);
+
             } catch (e) {}
         }
 
@@ -124,6 +131,11 @@
             });
         }
 
+        function isBuyPageLoaded() {
+            return Array.from(document.querySelectorAll("button"))
+                .some(b => /buy/i.test(b.innerText));
+        }
+
         function scanAndBuy() {
             let rows = document.querySelectorAll("div");
 
@@ -137,7 +149,6 @@
 
                     if (btn) {
                         updateStatus("Buying " + amount);
-                        playAlarm(); // 🔔 ADDED HERE
                         reactClick(btn);
                         return true;
                     }
@@ -148,6 +159,13 @@
 
         function loop() {
             if (!running) return;
+
+            // 🔔 TRIGGER ONLY WHEN BUY PAGE LOADS
+            if (!alarmPlayed && isBuyPageLoaded()) {
+                playAlarmShort();
+                alarmPlayed = true;
+                updateStatus("Buy Page Detected 🔔");
+            }
 
             let defBtn = getDefaultBtn();
 
@@ -260,6 +278,7 @@
         document.getElementById("start").onclick = () => {
             targetAmount = Number(document.getElementById("amt").value);
             running = true;
+            alarmPlayed = false; // reset when restarting
             updateStatus("Started...");
             loop();
         };
