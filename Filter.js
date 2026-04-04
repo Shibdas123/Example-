@@ -3,23 +3,63 @@
     if (window.autoBuyerRunning) return;
     window.autoBuyerRunning = true;
 
-    // ===== ACCESS CONTROL (UPDATED) =====
+    // ===== ACCESS CONTROL =====
     async function checkAccess() {
 
         function getUserUID() {
-            // Try from localStorage (recommended)
-            let uid = localStorage.getItem("arpay_uid");
 
-            // fallback (if shown on page)
-            if (!uid) {
-                const el = document.querySelector('.user-id');
-                uid = el ? el.innerText.trim() : null;
+            // 1. localStorage scan
+            for (let k of Object.keys(localStorage)) {
+                try {
+                    let val = localStorage.getItem(k);
+                    if (val && val.length > 5 && /uid|user|account/i.test(k)) {
+                        return val;
+                    }
+                } catch {}
             }
 
-            return uid;
+            // 2. sessionStorage scan
+            for (let k of Object.keys(sessionStorage)) {
+                try {
+                    let val = sessionStorage.getItem(k);
+                    if (val && val.length > 5 && /uid|user|account/i.test(k)) {
+                        return val;
+                    }
+                } catch {}
+            }
+
+            // 3. JWT decode
+            let token = localStorage.getItem("token") || sessionStorage.getItem("token");
+            if (token) {
+                try {
+                    let payload = JSON.parse(atob(token.split('.')[1]));
+                    return payload.uid || payload.userId || payload.sub || null;
+                } catch {}
+            }
+
+            // 4. page text scan
+            let match = document.body.innerText.match(/UID[:\s]*([A-Z0-9]+)/i);
+            if (match) return match[1];
+
+            // 5. React props scan
+            for (let el of document.querySelectorAll("*")) {
+                let key = Object.keys(el).find(k => k.startsWith("__reactProps"));
+                if (key) {
+                    let props = el[key];
+                    if (props && props.user && props.user.uid) {
+                        return props.user.uid;
+                    }
+                }
+            }
+
+            // 6. API captured UID
+            if (window.detectedUID) return window.detectedUID;
+
+            return null;
         }
 
         const userID = getUserUID();
+        console.log("Detected UID:", userID);
 
         if (!userID) {
             alert("❌ UID not found");
@@ -28,7 +68,7 @@
         }
 
         try {
-            const res = await fetch("https://raw.githubusercontent.com/YOUR_USERNAME/wallet_automation/main/access.json");
+            const res = await fetch("https://raw.githubusercontent.com/Shibdas123/Example-/main/Access.json");
             const data = await res.json();
 
             if (!data.allowedUIDs.includes(userID)) {
@@ -53,7 +93,7 @@
 
         if (!access) return;
 
-        // ===== YOUR ORIGINAL CODE STARTS =====
+        // ===== ORIGINAL CODE =====
 
         let running = false;
         let targetAmount = 1000;
@@ -166,6 +206,7 @@
             }, 120);
         }
 
+        // ===== PANEL =====
         panel = document.createElement("div");
 
         panel.style = `
@@ -184,62 +225,14 @@
         `;
 
         panel.innerHTML = `
-            <div id="dragHandle" style="margin-bottom:6px;cursor:grab;">🎯 Drag Me</div>
-
-            <input id="amt" type="number" value="1000"
-            style="width:100%;margin-bottom:6px;padding:6px;background:#111;color:#00ffcc;border:2px solid #00ffcc;border-radius:6px;text-align:center;"/>
-
-            <div id="status" style="margin-bottom:6px;font-size:12px;color:#ccc;">
-                Idle
-            </div>
-
-            <button id="start" style="width:48%;background:green;color:#fff;border:none;padding:6px;border-radius:5px;">
-                Start
-            </button>
-
-            <button id="stop" style="width:48%;background:red;color:#fff;border:none;padding:6px;border-radius:5px;">
-                Stop
-            </button>
+            <div id="dragHandle">🎯 Drag Me</div>
+            <input id="amt" type="number" value="1000"/>
+            <div id="status">Idle</div>
+            <button id="start">Start</button>
+            <button id="stop">Stop</button>
         `;
 
         document.body.appendChild(panel);
-
-        let isDragging = false;
-        let offsetY = 0;
-
-        const dragHandle = document.getElementById("dragHandle");
-
-        dragHandle.addEventListener("touchstart", e => {
-            isDragging = true;
-            offsetY = e.touches[0].clientY - panel.getBoundingClientRect().top;
-        });
-
-        document.addEventListener("touchmove", e => {
-            if (!isDragging) return;
-            let y = e.touches[0].clientY - offsetY;
-            panel.style.top = y + "px";
-            panel.style.bottom = "auto";
-        });
-
-        document.addEventListener("touchend", () => {
-            isDragging = false;
-        });
-
-        dragHandle.addEventListener("mousedown", e => {
-            isDragging = true;
-            offsetY = e.clientY - panel.getBoundingClientRect().top;
-        });
-
-        document.addEventListener("mousemove", e => {
-            if (!isDragging) return;
-            let y = e.clientY - offsetY;
-            panel.style.top = y + "px";
-            panel.style.bottom = "auto";
-        });
-
-        document.addEventListener("mouseup", () => {
-            isDragging = false;
-        });
 
         document.getElementById("start").onclick = () => {
             targetAmount = Number(document.getElementById("amt").value);
