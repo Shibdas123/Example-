@@ -61,25 +61,70 @@
         let targetAmount = 1000;
         let panel = null;
 
-        // 🔔 BUY PAGE ALARM CONTROL
-        let alarmPlayed = false;
+        // 🔔 IMPROVED ALARM SYSTEM
+        let lastSignature = "";
+        let lastTriggerTime = 0;
         let audio = null;
+        let alarmInterval = null;
 
-        function playAlarmShort() {
-            try {
-                audio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
-                audio.volume = 1;
-                audio.play();
+        function startAlarm() {
+            if (alarmInterval) return;
 
-                setTimeout(() => {
-                    if (audio) {
-                        audio.pause();
-                        audio.currentTime = 0;
-                    }
-                }, 4000);
-
-            } catch (e) {}
+            alarmInterval = setInterval(() => {
+                try {
+                    audio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
+                    audio.volume = 1;
+                    audio.play();
+                } catch {}
+            }, 1200);
         }
+
+        function stopAlarm() {
+            if (alarmInterval) {
+                clearInterval(alarmInterval);
+                alarmInterval = null;
+            }
+            if (audio) {
+                audio.pause();
+                audio.currentTime = 0;
+            }
+        }
+
+        function getSignature() {
+            let txt = document.body.innerText || "";
+            return txt.slice(0, 300); // smaller = more stable
+        }
+
+        // 🔥 SMART OBSERVER (NO SPAM)
+        const observer = new MutationObserver(() => {
+            if (!running) return;
+
+            let now = Date.now();
+            let current = getSignature();
+
+            let changeAmount = Math.abs(current.length - lastSignature.length);
+
+            // only trigger if BIG change + cooldown
+            if (
+                current !== lastSignature &&
+                changeAmount > 50 &&                // ignore small updates
+                now - lastTriggerTime > 4000       // cooldown 4 sec
+            ) {
+                lastSignature = current;
+                lastTriggerTime = now;
+
+                startAlarm();
+                updateStatus("Page Changed 🔔");
+
+                // stop after 5 sec
+                setTimeout(stopAlarm, 3000);
+            }
+        });
+
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
 
         function reactClick(el) {
             try {
@@ -131,11 +176,6 @@
             });
         }
 
-        function isBuyPageLoaded() {
-            return Array.from(document.querySelectorAll("button"))
-                .some(b => /buy/i.test(b.innerText));
-        }
-
         function scanAndBuy() {
             let rows = document.querySelectorAll("div");
 
@@ -160,13 +200,6 @@
         function loop() {
             if (!running) return;
 
-            // 🔔 TRIGGER ONLY WHEN BUY PAGE LOADS
-            if (!alarmPlayed && isBuyPageLoaded()) {
-                playAlarmShort();
-                alarmPlayed = true;
-                updateStatus("Buy Page Detected 🔔");
-            }
-
             let defBtn = getDefaultBtn();
 
             if (defBtn) {
@@ -183,6 +216,7 @@
                 if (isSuccess()) {
                     updateStatus("Success");
                     closePopup();
+                    stopAlarm();
                     running = false;
 
                     if (panel) panel.remove();
@@ -238,53 +272,17 @@
 
         document.body.appendChild(panel);
 
-        let isDragging = false;
-        let offsetY = 0;
-
-        const dragHandle = document.getElementById("dragHandle");
-
-        dragHandle.addEventListener("touchstart", e => {
-            isDragging = true;
-            offsetY = e.touches[0].clientY - panel.getBoundingClientRect().top;
-        });
-
-        document.addEventListener("touchmove", e => {
-            if (!isDragging) return;
-            let y = e.touches[0].clientY - offsetY;
-            panel.style.top = y + "px";
-            panel.style.bottom = "auto";
-        });
-
-        document.addEventListener("touchend", () => {
-            isDragging = false;
-        });
-
-        dragHandle.addEventListener("mousedown", e => {
-            isDragging = true;
-            offsetY = e.clientY - panel.getBoundingClientRect().top;
-        });
-
-        document.addEventListener("mousemove", e => {
-            if (!isDragging) return;
-            let y = e.clientY - offsetY;
-            panel.style.top = y + "px";
-            panel.style.bottom = "auto";
-        });
-
-        document.addEventListener("mouseup", () => {
-            isDragging = false;
-        });
-
         document.getElementById("start").onclick = () => {
             targetAmount = Number(document.getElementById("amt").value);
             running = true;
-            alarmPlayed = false; // reset when restarting
+            lastSignature = getSignature();
             updateStatus("Started...");
             loop();
         };
 
         document.getElementById("stop").onclick = () => {
             running = false;
+            stopAlarm();
             updateStatus("Stopped");
         };
 
