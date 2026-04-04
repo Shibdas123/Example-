@@ -3,7 +3,9 @@
     if (window.autoBuyerRunning) return;
     window.autoBuyerRunning = true;
 
-    // ===== ACCESS CONTROL (SAFE INSERT) =====
+    // ===== ACCESS CONTROL (FIXED BLOCKING) =====
+    let accessGranted = false;
+
     (async () => {
 
         function getUserUID() {
@@ -15,8 +17,8 @@
                     try {
                         let obj = JSON.parse(val);
 
-                        if (obj?.memberId) return String(obj.memberId);
-                        if (obj?.value?.memberId) return String(obj.value.memberId);
+                        if (obj?.memberId) return String(obj.memberId).trim();
+                        if (obj?.value?.memberId) return String(obj.value.memberId).trim();
 
                     } catch {}
                 } catch {}
@@ -30,33 +32,39 @@
         if (!userID) {
             alert("❌ UID not found");
             window.autoBuyerRunning = false;
-            throw new Error("STOP");
+            return;
         }
 
         try {
             const res = await fetch("https://raw.githubusercontent.com/Shibdas123/Example-/main/Access.json");
             const data = await res.json();
 
-            if (!data.allowedUIDs.includes(userID)) {
+            const allowed = data.allowedUIDs.map(x => String(x).trim());
+
+            if (!allowed.includes(userID)) {
                 alert("⛔ Access Denied");
                 window.autoBuyerRunning = false;
-                throw new Error("STOP");
+                return;
             }
 
             console.log("✅ Access Granted:", userID);
+            accessGranted = true;
 
         } catch (err) {
             alert("⚠️ Access check failed");
             window.autoBuyerRunning = false;
-            throw new Error("STOP");
+            return;
         }
 
     })();
 
+    // 🔥 BLOCK EXECUTION IF NOT VERIFIED
+    if (!accessGranted) return;
+
     // ===== ORIGINAL CODE =====
 
     let running = false;
-    let targetAmount = 1000; // ✅ UPDATED
+    let targetAmount = 1000;
     let panel = null;
 
     function reactClick(el) {
@@ -205,7 +213,6 @@
 
     document.body.appendChild(panel);
 
-    // ===== DRAG FUNCTION =====
     let isDragging = false;
     let offsetY = 0;
 
@@ -243,7 +250,6 @@
         isDragging = false;
     });
 
-    // ===== CONTROLS =====
     document.getElementById("start").onclick = () => {
         targetAmount = Number(document.getElementById("amt").value);
         running = true;
