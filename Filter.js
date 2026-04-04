@@ -65,6 +65,15 @@
         let targetAmount = 1000;
         let panel = null;
 
+        // 🔔 ALARM FUNCTION ADDED
+        function playAlarm() {
+            try {
+                const audio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
+                audio.volume = 1;
+                audio.play();
+            } catch (e) {}
+        }
+
         function reactClick(el) {
             try {
                 const key = Object.keys(el).find(k => k.startsWith("__reactProps"));
@@ -128,6 +137,7 @@
 
                     if (btn) {
                         updateStatus("Buying " + amount);
+                        playAlarm(); // 🔔 ADDED HERE
                         reactClick(btn);
                         return true;
                     }
